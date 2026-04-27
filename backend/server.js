@@ -2,6 +2,25 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const bcrypt = require('bcryptjs');
+
+// ─── Auto-seed: crea admin si no existe ningún usuario ────────
+function autoSeed() {
+  try {
+    const db = require('./db');
+    const existe = db.prepare('SELECT id FROM users WHERE rol = ?').get('admin');
+    if (!existe) {
+      const hash = bcrypt.hashSync('admin123', 10);
+      db.prepare(`INSERT INTO users (id, nombre, email, password_hash, rol, estado, desde, iniciales, avatar_bg)
+                  VALUES (?, ?, ?, ?, 'admin', 'activo', '2024', 'AD', 'oklch(82% 0.12 200)')`)
+        .run('p-admin', 'Administración', 'admin@clubpoli.com', hash);
+      console.log('✅ Admin creado: admin@clubpoli.com / admin123');
+    }
+  } catch(e) {
+    console.error('Auto-seed error:', e.message);
+  }
+}
+autoSeed();
 
 const app = express();
 
