@@ -2,7 +2,9 @@
 const { DatabaseSync } = require('node:sqlite');
 const path = require('path');
 
-const _db = new DatabaseSync(path.join(__dirname, 'clubpoli.db'));
+// En Railway usar /data (volumen persistente), en local usar el directorio del backend
+const dbPath = process.env.DB_PATH || path.join(__dirname, 'clubpoli.db');
+const _db = new DatabaseSync(dbPath);
 
 // Wrapper compatible con la API de better-sqlite3 (síncrono)
 const db = {

@@ -1,0 +1,7 @@
+node_modules/
+backend/node_modules/
+backend/.env
+backend/clubpoli.db
+.env
+*.db
+.DS_Store
