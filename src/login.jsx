@@ -2,9 +2,9 @@
 // Login + Magic Link — autenticación real contra el backend
 // ──────────────────────────────────────────────────────────────
 
-function LoginScreen({ onLogin }) {
+function LoginScreen({ onLogin, prefillEmail }) {
   const [mode, setMode] = React.useState('password'); // 'password' | 'magic'
-  const [email, setEmail] = React.useState('');
+  const [email, setEmail] = React.useState(prefillEmail || '');
   const [password, setPassword] = React.useState('');
   const [showPass, setShowPass] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
@@ -57,11 +57,25 @@ function LoginScreen({ onLogin }) {
         </div>
 
         <h1 className="display" style={{ fontSize: 32, fontWeight: 700, margin: '0 0 8px', letterSpacing: '-0.02em' }}>
-          Buenas tardes.
+          {prefillEmail ? 'Ingresa tu contraseña.' : 'Buenas tardes.'}
         </h1>
-        <p style={{ color: 'var(--ink-2)', fontSize: 15, margin: '0 0 28px', lineHeight: 1.45 }}>
-          Acceda con su correo institucional o solicite un enlace seguro de acceso rápido.
-        </p>
+        {prefillEmail ? (
+          <div style={{
+            display: 'flex', alignItems: 'flex-start', gap: 10,
+            padding: '10px 14px', borderRadius: 10, marginBottom: 20,
+            background: 'var(--present-soft)',
+            border: '1px solid color-mix(in oklab, var(--present) 30%, transparent)',
+          }}>
+            <Icon.check size={15} style={{ color: 'var(--present)', marginTop: 2, flexShrink: 0 }}/>
+            <div style={{ fontSize: 13, color: 'var(--present)', lineHeight: 1.45 }}>
+              Enlace verificado. Tu correo ya está ingresado, solo falta la contraseña.
+            </div>
+          </div>
+        ) : (
+          <p style={{ color: 'var(--ink-2)', fontSize: 15, margin: '0 0 28px', lineHeight: 1.45 }}>
+            Acceda con su correo institucional o solicite un enlace seguro de acceso rápido.
+          </p>
+        )}
 
         <div style={{ marginBottom: 18 }}>
           <Segmented

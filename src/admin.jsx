@@ -2053,6 +2053,9 @@ function EditarProfesorModal({ profesor, onClose, onSave, onToast }) {
       : (profesor.disciplinas ? profesor.disciplinas.split(',').map(s => s.trim()).filter(Boolean) : []),
     estado: (profesor.estado === 'inactivo') ? 'inactivo' : 'activo',
   });
+  const [password, setPassword] = React.useState('');
+  const [passwordConfirm, setPasswordConfirm] = React.useState('');
+  const [showPass, setShowPass] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const toggleDisc = (d) => setForm(f => ({
@@ -2062,9 +2065,11 @@ function EditarProfesorModal({ profesor, onClose, onSave, onToast }) {
 
   const handleSave = async () => {
     if (!form.nombre.trim() || !form.email.trim()) { onToast('Nombre y email son obligatorios'); return; }
+    if (password && password.length < 6) { onToast('La contraseña debe tener al menos 6 caracteres'); return; }
+    if (password && password !== passwordConfirm) { onToast('Las contraseñas no coinciden'); return; }
     setSaving(true);
     try {
-      const updated = await api.updateProfessor(profesor.id, {
+      await api.updateProfessor(profesor.id, {
         nombre:     form.nombre.trim(),
         email:      form.email.trim(),
         dni:        form.dni || null,
@@ -2072,7 +2077,10 @@ function EditarProfesorModal({ profesor, onClose, onSave, onToast }) {
         disciplinas: form.disciplinas,
         estado:     form.estado,
       });
-      onSave({ ...profesor, ...form, id: profesor.id, avatar_bg: profesor.avatar_bg });
+      if (password) {
+        await api.adminSetProfessorPassword(profesor.id, password);
+      }
+      onSave({ ...profesor, ...form, id: profesor.id, avatar_bg: profesor.avatar_bg, estado: password ? 'activo' : form.estado });
     } catch (e) { onToast('Error: ' + e.message); } finally { setSaving(false); }
   };
 
@@ -2130,6 +2138,37 @@ function EditarProfesorModal({ profesor, onClose, onSave, onToast }) {
                   fontWeight: 600, fontSize: 13, cursor: 'pointer', textTransform: 'capitalize',
                 }}>{op}</button>
               ))}
+            </div>
+          </div>
+          <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12 }}>
+            <div className="eyebrow" style={{ marginBottom: 8 }}>
+              {profesor.estado === 'pendiente' ? 'Asignar contraseña' : 'Cambiar contraseña'}
+            </div>
+            {profesor.estado === 'pendiente' && (
+              <div style={{ fontSize: 12, color: 'var(--ink-3)', marginBottom: 8, lineHeight: 1.4 }}>
+                Este profesor aún no tiene contraseña. Asígnale una para que pueda iniciar sesión directamente.
+              </div>
+            )}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <label>
+                <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginBottom: 6 }}>Nueva contraseña</div>
+                <div style={{ position: 'relative' }}>
+                  <input className="input" type={showPass ? 'text' : 'password'} placeholder="mín. 6 caracteres"
+                    value={password} onChange={e => setPassword(e.target.value)}/>
+                  <button type="button" onClick={() => setShowPass(!showPass)}
+                    style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 0, cursor: 'pointer', color: 'var(--ink-3)', padding: 0 }}>
+                    {showPass ? <Icon.eyeOff size={14}/> : <Icon.eye size={14}/>}
+                  </button>
+                </div>
+              </label>
+              <label>
+                <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginBottom: 6 }}>Confirmar contraseña</div>
+                <input className="input" type={showPass ? 'text' : 'password'} placeholder="repetir contraseña"
+                  value={passwordConfirm} onChange={e => setPasswordConfirm(e.target.value)}/>
+              </label>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 6 }}>
+              Deja vacío si no deseas cambiar la contraseña.
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>

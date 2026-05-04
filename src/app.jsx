@@ -332,6 +332,7 @@ function App() {
   const [authenticated, setAuthenticated] = React.useState(false);
   const [needsPassword, setNeedsPassword] = React.useState(false);
   const [pendingUser, setPendingUser] = React.useState(null);
+  const [magicEmail, setMagicEmail] = React.useState(null);
   const [loadingData, setLoadingData] = React.useState(false);
   const [userRole, setUserRole] = React.useState(null);
   const [route, setRoute] = React.useState({ name: 'dashboard' });
@@ -342,6 +343,8 @@ function App() {
   React.useEffect(() => {
     const token = api.getToken();
     if (token) {
+      const fromMagic = !!api._fromMagicLink;
+      api._fromMagicLink = false;
       setLoadingData(true);
       api.me().then(user => {
         return initAppData(user).then(() => {
@@ -349,6 +352,11 @@ function App() {
           if (user.rol === 'profesor' && user.estado === 'pendiente') {
             setPendingUser(user);
             setNeedsPassword(true);
+            setAuthenticated(false);
+          } else if (user.rol === 'profesor' && fromMagic) {
+            // Magic link + contraseña ya configurada → mostrar login con email pre-relleno
+            api.clearToken();
+            setMagicEmail(user.email);
             setAuthenticated(false);
           } else {
             if (user.rol === 'admin') setTweaks(t => ({ ...t, mode: 'admin', viewport: 'desktop' }));
@@ -383,6 +391,7 @@ function App() {
     setLoadingData(true);
     try {
       setUserRole(user.rol);
+      setMagicEmail(null);
       if (user.rol === 'admin') {
         await initAdminData();
         setTweaks(t => ({ ...t, mode: 'admin', viewport: 'desktop' }));
@@ -462,7 +471,7 @@ function App() {
 
   // ─── Login view
   if (!authenticated) {
-    const inner = <LoginScreen onLogin={handleLogin}/>;
+    const inner = <LoginScreen onLogin={handleLogin} prefillEmail={magicEmail}/>;
     return (
       <>
         <div className="viewport">

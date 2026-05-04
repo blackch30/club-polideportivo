@@ -105,6 +105,7 @@ const api = {
   generateMagicLink(id, opts) { return this.post(`/admin/professors/${id}/magic-link`, opts || {}); },
   sendMagicLinkEmail(id)   { return this.post(`/admin/professors/${id}/magic-link/email`, {}); },
   revokeMagicLink(id)      { return this.delete(`/admin/professors/${id}/magic-link`); },
+  adminSetProfessorPassword(id, password) { return this.put(`/admin/professors/${id}/password`, { password }); },
 
   // Admin Talleres
   adminGetWorkshops()                    { return this.get('/admin/workshops'); },
@@ -167,6 +168,7 @@ const api = {
   const match = hash.match(/magic=([^&]+)/);
   if (match) {
     api.setToken(match[1]);
+    api._fromMagicLink = true;
     window.history.replaceState(null, '', window.location.pathname);
   }
 })();

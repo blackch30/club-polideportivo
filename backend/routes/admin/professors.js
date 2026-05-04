@@ -254,6 +254,19 @@ router.post('/:id/magic-link/email', requireAdmin, async (req, res) => {
   }
 });
 
+router.put('/:id/password', requireAdmin, async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!password || password.length < 6) return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+    const hash = bcrypt.hashSync(password, 10);
+    await query("UPDATE users SET password_hash = $1, estado = 'activo' WHERE id = $2 AND rol = 'profesor'", [hash, req.params.id]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Error interno' });
+  }
+});
+
 router.delete('/:id/magic-link', requireAdmin, async (req, res) => {
   try {
     await query("UPDATE magic_links SET activo = 0 WHERE user_id = $1", [req.params.id]);
