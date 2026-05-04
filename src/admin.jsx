@@ -2132,9 +2132,10 @@ function EditarProfesorModal({ profesor, onClose, onSave, onToast }) {
 }
 
 function AgregarProfesorModal({ autoLink, onClose, onSave, onToast }) {
-  const [form, setForm] = React.useState({ nombre: '', email: '', dni: '', telefono: '', disciplinas: [] });
+  const [form, setForm] = React.useState({ nombre: '', email: '', dni: '', telefono: '', disciplinas: [], password: '', passwordConfirm: '' });
   const [saving, setSaving] = React.useState(false);
   const [genLink, setGenLink] = React.useState(!!autoLink);
+  const [showPass, setShowPass] = React.useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const toggleDisc = (d) => setForm(f => ({
@@ -2146,6 +2147,8 @@ function AgregarProfesorModal({ autoLink, onClose, onSave, onToast }) {
 
   const handleSave = async () => {
     if (!form.nombre.trim() || !form.email.trim()) { onToast('Nombre y email son obligatorios'); return; }
+    if (form.password && form.password.length < 6) { onToast('La contraseña debe tener al menos 6 caracteres'); return; }
+    if (form.password && form.password !== form.passwordConfirm) { onToast('Las contraseñas no coinciden'); return; }
     setSaving(true);
     try {
       const nuevo = await api.createProfessor({
@@ -2154,8 +2157,9 @@ function AgregarProfesorModal({ autoLink, onClose, onSave, onToast }) {
         dni: form.dni || null,
         telefono: form.telefono || null,
         disciplinas: form.disciplinas,
+        password: form.password || null,
       });
-      onSave(nuevo, genLink);
+      onSave(nuevo, genLink && !form.password);
     } catch (e) { onToast('Error: ' + e.message); } finally { setSaving(false); }
   };
 
@@ -2194,6 +2198,30 @@ function AgregarProfesorModal({ autoLink, onClose, onSave, onToast }) {
               <div className="eyebrow" style={{ marginBottom: 6 }}>Teléfono (opcional)</div>
               <input className="input" placeholder="+54 11 0000-0000" value={form.telefono} onChange={e => set('telefono', e.target.value)}/>
             </label>
+          </div>
+          <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12 }}>
+            <div className="eyebrow" style={{ marginBottom: 8 }}>Contraseña de acceso</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <label>
+                <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginBottom: 6 }}>Contraseña</div>
+                <div style={{ position: 'relative' }}>
+                  <input className="input" type={showPass ? 'text' : 'password'} placeholder="mín. 6 caracteres"
+                    value={form.password} onChange={e => set('password', e.target.value)}/>
+                  <button type="button" onClick={() => setShowPass(!showPass)}
+                    style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 0, cursor: 'pointer', color: 'var(--ink-3)', padding: 0 }}>
+                    <Icon.eye size={14}/>
+                  </button>
+                </div>
+              </label>
+              <label>
+                <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginBottom: 6 }}>Confirmar contraseña</div>
+                <input className="input" type={showPass ? 'text' : 'password'} placeholder="repetir contraseña"
+                  value={form.passwordConfirm} onChange={e => set('passwordConfirm', e.target.value)}/>
+              </label>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 6 }}>
+              Si dejas vacío, el profesor accede por enlace mágico y crea su contraseña en el primer ingreso.
+            </div>
           </div>
           <div>
             <div className="eyebrow" style={{ marginBottom: 8 }}>Disciplinas</div>

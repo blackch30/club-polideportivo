@@ -37,8 +37,9 @@ router.get('/', requireAdmin, async (req, res) => {
 
 router.post('/', requireAdmin, async (req, res) => {
   try {
-    const { nombre, email, dni, telefono, disciplinas = [], desde } = req.body;
+    const { nombre, email, dni, telefono, disciplinas = [], desde, password } = req.body;
     if (!nombre || !email) return res.status(400).json({ error: 'nombre y email requeridos' });
+    if (password && password.length < 6) return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
 
     const id = 'p-' + crypto.randomBytes(4).toString('hex');
     const partes = nombre.trim().split(' ');
@@ -46,13 +47,15 @@ router.post('/', requireAdmin, async (req, res) => {
       ? partes[0][0].toUpperCase() + partes[partes.length - 1][0].toUpperCase()
       : nombre.slice(0, 2).toUpperCase();
     const hue = Math.floor(Math.random() * 360);
-    const defaultPassword = bcrypt.hashSync('clubpoli2026', 10);
+    const passwordHash = bcrypt.hashSync(password || 'clubpoli2026', 10);
+    const estado = password ? 'activo' : 'pendiente';
 
     await query(`
       INSERT INTO users (id, nombre, email, password_hash, rol, dni, telefono, estado, desde, iniciales, avatar_bg)
-      VALUES ($1, $2, $3, $4, 'profesor', $5, $6, 'pendiente', $7, $8, $9)
-    `, [id, nombre.trim(), email.toLowerCase(), defaultPassword,
-        dni || null, telefono || null, desde || String(new Date().getFullYear()),
+      VALUES ($1, $2, $3, $4, 'profesor', $5, $6, $7, $8, $9, $10)
+    `, [id, nombre.trim(), email.toLowerCase(), passwordHash,
+        dni || null, telefono || null, estado,
+        desde || String(new Date().getFullYear()),
         iniciales, `oklch(82% 0.12 ${hue})`]);
 
     for (const d of disciplinas) {
