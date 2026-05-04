@@ -352,7 +352,7 @@ function App() {
             setAuthenticated(false);
           } else {
             if (user.rol === 'admin') setTweaks(t => ({ ...t, mode: 'admin', viewport: 'desktop' }));
-            else setTweaks(t => ({ ...t, mode: 'profesor' }));
+            else setTweaks(t => ({ ...t, mode: 'profesor', viewport: 'desktop' }));
             setAuthenticated(true);
           }
         });

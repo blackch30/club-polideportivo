@@ -96,12 +96,12 @@ function ReportePublicoModal({ onClose }) {
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <input className="input" readOnly value={url} style={{ flex: 1, fontSize: 13, color: 'var(--ink-2)', background: 'var(--surface-2)' }} onClick={e => e.target.select()}/>
             <Button onClick={handleCopy} style={{ flexShrink: 0 }}>
-              {copied ? <><Icon.check size={14}/> Copiado</> : <><Icon.copy size={14}/> Copiar</>}
+              {copied ? <><Icon.check size={14}/> Copiado</> : <><Icon.link size={14}/> Copiar</>}
             </Button>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <a href={url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
-              <Button variant="secondary" size="sm"><Icon.externalLink size={13}/> Abrir en nueva pestaña</Button>
+              <Button variant="secondary" size="sm"><Icon.arrowRight size={13}/> Abrir en nueva pestaña</Button>
             </a>
           </div>
         </div>
@@ -1394,6 +1394,16 @@ function AdminProfesores({ onToast }) {
     } catch (e) { onToast('Error: ' + e.message); }
   };
 
+  const deleteProfesor = async (id, nombre) => {
+    if (!confirm(`¿Eliminar al profesor ${nombre}? Esta acción no se puede deshacer.`)) return;
+    try {
+      await api.deleteProfessor(id);
+      setProfesores(prev => prev.filter(p => p.id !== id));
+      setLinks(prev => { const n = { ...prev }; delete n[id]; return n; });
+      onToast('Profesor eliminado');
+    } catch (e) { onToast('Error: ' + e.message); }
+  };
+
   const stats = {
     total: profesores.length,
     activos: profesores.filter(p => p.estado === 'activo').length,
@@ -1516,6 +1526,7 @@ function AdminProfesores({ onToast }) {
                         ) : (
                           <Button size="sm" onClick={() => generateLink(p)}><Icon.link size={13}/> Generar link</Button>
                         )}
+                        <Button size="sm" variant="danger" onClick={() => deleteProfesor(p.id, p.nombre)}><Icon.x size={13}/></Button>
                       </div>
                     </td>
                   </tr>
