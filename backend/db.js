@@ -69,14 +69,17 @@ async function initDB() {
     );
 
     CREATE TABLE IF NOT EXISTS participantes (
-      id         TEXT PRIMARY KEY,
-      nombre     TEXT NOT NULL,
-      edad       INTEGER,
-      estado     TEXT NOT NULL DEFAULT 'activo',
-      iniciales  TEXT,
-      avatar_bg  TEXT,
-      contacto   TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW()
+      id                 TEXT PRIMARY KEY,
+      nombre             TEXT NOT NULL,
+      edad               INTEGER,
+      estado             TEXT NOT NULL DEFAULT 'activo',
+      iniciales          TEXT,
+      avatar_bg          TEXT,
+      contacto           TEXT,
+      apoderado_nombre   TEXT,
+      apoderado_telefono TEXT,
+      apoderado_email    TEXT,
+      created_at         TIMESTAMPTZ DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS taller_participantes (
@@ -144,6 +147,13 @@ async function initDB() {
       canchas   INTEGER DEFAULT 0,
       activa    INTEGER DEFAULT 1
     );
+  `);
+
+  // Add new columns to existing tables (safe to run multiple times)
+  await pool.query(`
+    ALTER TABLE participantes ADD COLUMN IF NOT EXISTS apoderado_nombre TEXT;
+    ALTER TABLE participantes ADD COLUMN IF NOT EXISTS apoderado_telefono TEXT;
+    ALTER TABLE participantes ADD COLUMN IF NOT EXISTS apoderado_email TEXT;
   `);
 
   // Filas por defecto

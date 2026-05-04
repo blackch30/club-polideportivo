@@ -135,6 +135,21 @@ router.get('/me', requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/auth/set-password  (requires auth token)
+router.post('/set-password', requireAuth, async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!password || password.length < 6) return res.status(400).json({ error: 'La contraseña debe tener al menos 6 caracteres' });
+    const hash = bcrypt.hashSync(password, 10);
+    await query("UPDATE users SET password_hash = $1, estado = 'activo' WHERE id = $2", [hash, req.user.id]);
+    const user = await queryOne('SELECT id, nombre, email, rol, dni, telefono, estado, desde, iniciales, avatar_bg FROM users WHERE id = $1', [req.user.id]);
+    res.json({ ok: true, user });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Error interno' });
+  }
+});
+
 // POST /api/auth/change-password
 router.post('/change-password', requireAuth, async (req, res) => {
   try {

@@ -66,6 +66,50 @@ function Kpi({ label, value, delta, deltaPositive = true, sparkValues, unit }) {
 // ═══════════════════════════════════════════════════════════════
 // MÓDULO: DASHBOARD
 // ═══════════════════════════════════════════════════════════════
+function ReportePublicoModal({ onClose }) {
+  const url = window.location.origin + '/reporte.html';
+  const [copied, setCopied] = React.useState(false);
+
+  const handleCopy = () => {
+    copyToClipboard(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(16,24,40,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000, padding: 20 }} onClick={onClose}>
+      <div className="card" onClick={e => e.stopPropagation()} style={{ width: 460, maxWidth: '100%', padding: 0, overflow: 'hidden' }}>
+        <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--accent-soft)', color: 'var(--accent-ink)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Icon.link size={18}/>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 11, color: 'var(--ink-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Resumen público</div>
+            <div className="display" style={{ fontSize: 17, fontWeight: 700 }}>Compartir resumen del club</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'transparent', border: 0, color: 'var(--ink-3)', cursor: 'pointer', padding: 4 }}><Icon.x size={18}/></button>
+        </div>
+        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.5 }}>
+            Comparte este enlace con apoderados y socios para que vean el resumen público del club (talleres, estadísticas, contacto). No requiere contraseña.
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input className="input" readOnly value={url} style={{ flex: 1, fontSize: 13, color: 'var(--ink-2)', background: 'var(--surface-2)' }} onClick={e => e.target.select()}/>
+            <Button onClick={handleCopy} style={{ flexShrink: 0 }}>
+              {copied ? <><Icon.check size={14}/> Copiado</> : <><Icon.copy size={14}/> Copiar</>}
+            </Button>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <a href={url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+              <Button variant="secondary" size="sm"><Icon.externalLink size={13}/> Abrir en nueva pestaña</Button>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AdminDashboard({ onGoToProfesores, onNuevaInscripcion, onToast }) {
   const [dashStats, setDashStats] = React.useState(null);
   const totalAlumnos = dashStats?.alumnosActivos ?? (PARTICIPANTS_POOL.filter(p => p.estado === 'activo').length * 4);
@@ -76,6 +120,7 @@ function AdminDashboard({ onGoToProfesores, onNuevaInscripcion, onToast }) {
     : REPORTES.ingresosMes.slice(-1)[0] + 'k';
   const asistenciaProm = dashStats?.asistenciaProm ?? 87;
   const [pendientes, setPendientes] = React.useState([]);
+  const [reporteModal, setReporteModal] = React.useState(false);
 
   React.useEffect(() => {
     api.getDashboardReport().then(setDashStats).catch(() => {});
@@ -111,6 +156,7 @@ function AdminDashboard({ onGoToProfesores, onNuevaInscripcion, onToast }) {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <Button variant="secondary" size="sm"><Icon.calendar size={14}/> Abril 2026</Button>
+          <Button variant="secondary" size="sm" onClick={() => setReporteModal(true)}><Icon.link size={14}/> Compartir resumen</Button>
           <Button size="sm" onClick={onNuevaInscripcion}><Icon.plus size={14}/> Nueva inscripción</Button>
         </div>
       </div>
@@ -240,6 +286,7 @@ function AdminDashboard({ onGoToProfesores, onNuevaInscripcion, onToast }) {
           </div>
         </div>
       </div>
+      {reporteModal && <ReportePublicoModal onClose={() => setReporteModal(false)}/>}
     </div>
   );
 }
@@ -365,7 +412,7 @@ function AdminSocios({ onToast }) {
 }
 
 function NuevoSocioModal({ onClose, onSave, onToast }) {
-  const [form, setForm] = React.useState({ nombre: '', edad: '', contacto: '' });
+  const [form, setForm] = React.useState({ nombre: '', edad: '', contacto: '', apoderado_nombre: '', apoderado_telefono: '', apoderado_email: '' });
   const [saving, setSaving] = React.useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -374,9 +421,12 @@ function NuevoSocioModal({ onClose, onSave, onToast }) {
     setSaving(true);
     try {
       const socio = await api.createParticipant({
-        nombre:   form.nombre.trim(),
-        edad:     form.edad ? Number(form.edad) : null,
-        contacto: form.contacto || null,
+        nombre:             form.nombre.trim(),
+        edad:               form.edad ? Number(form.edad) : null,
+        contacto:           form.contacto || null,
+        apoderado_nombre:   form.apoderado_nombre || null,
+        apoderado_telefono: form.apoderado_telefono || null,
+        apoderado_email:    form.apoderado_email || null,
       });
       onSave(socio);
     } catch (e) {
@@ -392,7 +442,7 @@ function NuevoSocioModal({ onClose, onSave, onToast }) {
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       zIndex: 3000, padding: 20,
     }} onClick={onClose}>
-      <div className="card" onClick={e => e.stopPropagation()} style={{ width: 420, maxWidth: '100%', padding: 0, overflow: 'hidden' }}>
+      <div className="card" onClick={e => e.stopPropagation()} style={{ width: 420, maxWidth: '100%', padding: 0, overflow: 'hidden', maxHeight: '90vh', overflowY: 'auto' }}>
         <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--accent-soft)', color: 'var(--accent-ink)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
             <Icon.plus size={18}/>
@@ -423,6 +473,28 @@ function NuevoSocioModal({ onClose, onSave, onToast }) {
                 value={form.contacto} onChange={e => set('contacto', e.target.value)}/>
             </label>
           </div>
+          <div style={{ paddingTop: 8, borderTop: '1px solid var(--line)' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--ink-3)', marginBottom: 10 }}>Datos del apoderado</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <label>
+                <div className="eyebrow" style={{ marginBottom: 6 }}>Nombre del apoderado</div>
+                <input className="input" placeholder="Ej. Carlos González"
+                  value={form.apoderado_nombre} onChange={e => set('apoderado_nombre', e.target.value)}/>
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <label>
+                  <div className="eyebrow" style={{ marginBottom: 6 }}>Teléfono</div>
+                  <input className="input" placeholder="+54 11 5555-5555"
+                    value={form.apoderado_telefono} onChange={e => set('apoderado_telefono', e.target.value)}/>
+                </label>
+                <label>
+                  <div className="eyebrow" style={{ marginBottom: 6 }}>Correo</div>
+                  <input className="input" type="email" placeholder="apoderado@mail.com"
+                    value={form.apoderado_email} onChange={e => set('apoderado_email', e.target.value)}/>
+                </label>
+              </div>
+            </div>
+          </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
             <Button variant="secondary" onClick={onClose} style={{ flex: 1 }}>Cancelar</Button>
             <Button onClick={handleSave} disabled={saving} style={{ flex: 1 }}>
@@ -436,7 +508,10 @@ function NuevoSocioModal({ onClose, onSave, onToast }) {
 }
 
 function EditarSocioModal({ socio, onClose, onSave, onToast }) {
-  const [form, setForm] = React.useState({ nombre: socio.nombre, edad: socio.edad || '', contacto: socio.contacto || '', estado: socio.estado });
+  const [form, setForm] = React.useState({
+    nombre: socio.nombre, edad: socio.edad || '', contacto: socio.contacto || '', estado: socio.estado,
+    apoderado_nombre: socio.apoderado_nombre || '', apoderado_telefono: socio.apoderado_telefono || '', apoderado_email: socio.apoderado_email || '',
+  });
   const [saving, setSaving] = React.useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -444,14 +519,20 @@ function EditarSocioModal({ socio, onClose, onSave, onToast }) {
     if (!form.nombre.trim()) { onToast('Ingrese el nombre'); return; }
     setSaving(true);
     try {
-      const updated = await api.updateParticipant(socio.id, { nombre: form.nombre.trim(), edad: form.edad ? Number(form.edad) : null, contacto: form.contacto || null, estado: form.estado });
+      const updated = await api.updateParticipant(socio.id, {
+        nombre: form.nombre.trim(), edad: form.edad ? Number(form.edad) : null,
+        contacto: form.contacto || null, estado: form.estado,
+        apoderado_nombre: form.apoderado_nombre || null,
+        apoderado_telefono: form.apoderado_telefono || null,
+        apoderado_email: form.apoderado_email || null,
+      });
       onSave(updated);
     } catch (e) { onToast('Error: ' + e.message); } finally { setSaving(false); }
   };
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(16,24,40,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000, padding: 20 }} onClick={onClose}>
-      <div className="card" onClick={e => e.stopPropagation()} style={{ width: 420, maxWidth: '100%', padding: 0, overflow: 'hidden' }}>
+      <div className="card" onClick={e => e.stopPropagation()} style={{ width: 420, maxWidth: '100%', padding: 0, overflow: 'hidden', maxHeight: '90vh', overflowY: 'auto' }}>
         <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--accent-soft)', color: 'var(--accent-ink)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Icon.edit size={18}/></div>
           <div style={{ flex: 1 }}>
@@ -482,6 +563,28 @@ function EditarSocioModal({ socio, onClose, onSave, onToast }) {
             <div className="eyebrow" style={{ marginBottom: 6 }}>Contacto</div>
             <input className="input" placeholder="Teléfono o email" value={form.contacto} onChange={e => set('contacto', e.target.value)}/>
           </label>
+          <div style={{ paddingTop: 8, borderTop: '1px solid var(--line)' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--ink-3)', marginBottom: 10 }}>Datos del apoderado</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <label>
+                <div className="eyebrow" style={{ marginBottom: 6 }}>Nombre del apoderado</div>
+                <input className="input" placeholder="Ej. Carlos González"
+                  value={form.apoderado_nombre} onChange={e => set('apoderado_nombre', e.target.value)}/>
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <label>
+                  <div className="eyebrow" style={{ marginBottom: 6 }}>Teléfono</div>
+                  <input className="input" placeholder="+54 11 5555-5555"
+                    value={form.apoderado_telefono} onChange={e => set('apoderado_telefono', e.target.value)}/>
+                </label>
+                <label>
+                  <div className="eyebrow" style={{ marginBottom: 6 }}>Correo</div>
+                  <input className="input" type="email" placeholder="apoderado@mail.com"
+                    value={form.apoderado_email} onChange={e => set('apoderado_email', e.target.value)}/>
+                </label>
+              </div>
+            </div>
+          </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
             <Button variant="secondary" onClick={onClose} style={{ flex: 1 }}>Cancelar</Button>
             <Button onClick={handleSave} disabled={saving} style={{ flex: 1 }}>{saving ? 'Guardando…' : 'Guardar cambios'}</Button>

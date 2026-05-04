@@ -570,7 +570,7 @@ function HistoryScreen({ workshop, onBack }) {
 function AddParticipantScreen({ workshop, onBack, onToast }) {
   const [tab, setTab] = React.useState('search'); // 'search' | 'new'
   const [q, setQ] = React.useState('');
-  const [form, setForm] = React.useState({ nombre: '', edad: '', contacto: '' });
+  const [form, setForm] = React.useState({ nombre: '', edad: '', contacto: '', apoderado_nombre: '', apoderado_telefono: '', apoderado_email: '' });
   const [available, setAvailable] = React.useState([]);
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
@@ -636,7 +636,7 @@ function AddParticipantScreen({ workshop, onBack, onToast }) {
         </div>
         <Segmented
           value={tab}
-          onChange={(v) => { setTab(v); setQ(''); setForm({ nombre: '', edad: '', contacto: '' }); }}
+          onChange={(v) => { setTab(v); setQ(''); setForm({ nombre: '', edad: '', contacto: '', apoderado_nombre: '', apoderado_telefono: '', apoderado_email: '' }); }}
           options={[
             { value: 'search', label: 'Buscar existente' },
             { value: 'new', label: 'Registrar nuevo' },
@@ -692,6 +692,18 @@ function AddParticipantScreen({ workshop, onBack, onToast }) {
             <label>
               <div className="eyebrow" style={{ marginBottom: 6 }}>Contacto del tutor</div>
               <input className="input" value={form.contacto} onChange={e => setForm({ ...form, contacto: e.target.value })} placeholder="+54 11 5555-5555"/>
+            </label>
+            <label>
+              <div className="eyebrow" style={{ marginBottom: 6 }}>Nombre del apoderado</div>
+              <input className="input" value={form.apoderado_nombre} onChange={e => setForm({ ...form, apoderado_nombre: e.target.value })} placeholder="Ej. Carlos González"/>
+            </label>
+            <label>
+              <div className="eyebrow" style={{ marginBottom: 6 }}>Teléfono apoderado</div>
+              <input className="input" value={form.apoderado_telefono} onChange={e => setForm({ ...form, apoderado_telefono: e.target.value })} placeholder="+54 11 5555-5555"/>
+            </label>
+            <label>
+              <div className="eyebrow" style={{ marginBottom: 6 }}>Correo apoderado</div>
+              <input className="input" type="email" value={form.apoderado_email} onChange={e => setForm({ ...form, apoderado_email: e.target.value })} placeholder="apoderado@mail.com"/>
             </label>
             <div style={{
               padding: 12, borderRadius: 12, marginTop: 4,

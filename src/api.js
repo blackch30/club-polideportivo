@@ -157,6 +157,8 @@ const api = {
   getCompany()        { return this.get('/admin/company'); },
   updateCompany(data) { return this.put('/admin/company', data); },
   updateSede(id, d)   { return this.put(`/admin/company/sedes/${id}`, d); },
+
+  setPassword(password) { return this.post('/auth/set-password', { password }); },
 };
 
 // Verificar magic link en URL hash al cargar

@@ -35,6 +35,7 @@ app.get('/', (_, res) => res.sendFile(path.join(frontendDir, 'Panel de Profesor.
 
 // ─── Rutas ────────────────────────────────────────────────────
 app.use('/api/auth',               require('./routes/auth'));
+app.use('/api/public',             require('./routes/public'));
 app.use('/api/workshops',          require('./routes/workshops'));
 app.use('/api/attendance',         require('./routes/attendance'));
 app.use('/api/participants',       require('./routes/participants'));

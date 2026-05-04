@@ -265,11 +265,73 @@ function TweaksPanel({ tweaks, setTweaks, open, setOpen }) {
   );
 }
 
+// ── SetPasswordScreen
+function SetPasswordScreen({ user, onLogin }) {
+  const [password, setPassword] = React.useState('');
+  const [confirm, setConfirm] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (password.length < 6) { setError('La contraseña debe tener al menos 6 caracteres'); return; }
+    if (password !== confirm) { setError('Las contraseñas no coinciden'); return; }
+    setSaving(true);
+    try {
+      const res = await api.setPassword(password);
+      onLogin(res.user);
+    } catch (err) {
+      setError(err.message || 'Error al guardar la contraseña');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: 24 }}>
+      <div className="card" style={{ width: 380, maxWidth: '100%', padding: 0, overflow: 'hidden' }}>
+        <div style={{ padding: '24px 24px 16px', borderBottom: '1px solid var(--line)' }}>
+          <div className="eyebrow" style={{ marginBottom: 4 }}>Primer acceso</div>
+          <div className="display" style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em' }}>
+            Bienvenido, {user.nombre}
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 6, lineHeight: 1.5 }}>
+            Para continuar, crea una contraseña para tu cuenta.
+          </div>
+        </div>
+        <form onSubmit={handleSubmit} style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <label>
+            <div className="eyebrow" style={{ marginBottom: 6 }}>Nueva contraseña</div>
+            <input className="input" type="password" placeholder="Mínimo 6 caracteres"
+              value={password} onChange={e => setPassword(e.target.value)} autoFocus/>
+          </label>
+          <label>
+            <div className="eyebrow" style={{ marginBottom: 6 }}>Confirmar contraseña</div>
+            <input className="input" type="password" placeholder="Repite la contraseña"
+              value={confirm} onChange={e => setConfirm(e.target.value)}/>
+          </label>
+          {error && (
+            <div style={{ fontSize: 12.5, color: 'var(--absent)', background: 'var(--absent-soft, color-mix(in oklab, var(--absent) 12%, transparent))', padding: '8px 12px', borderRadius: 8 }}>
+              {error}
+            </div>
+          )}
+          <button type="submit" className="btn btn-primary" disabled={saving} style={{ marginTop: 4 }}>
+            {saving ? 'Guardando…' : 'Crear contraseña y acceder'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ── Main App
 function App() {
   const [tweaks, setTweaks] = useTweaks();
   const [tweaksOpen, setTweaksOpen] = React.useState(false);
   const [authenticated, setAuthenticated] = React.useState(false);
+  const [needsPassword, setNeedsPassword] = React.useState(false);
+  const [pendingUser, setPendingUser] = React.useState(null);
   const [loadingData, setLoadingData] = React.useState(false);
   const [userRole, setUserRole] = React.useState(null);
   const [route, setRoute] = React.useState({ name: 'dashboard' });
@@ -284,9 +346,15 @@ function App() {
       api.me().then(user => {
         return initAppData(user).then(() => {
           setUserRole(user.rol);
-          if (user.rol === 'admin') setTweaks(t => ({ ...t, mode: 'admin', viewport: 'desktop' }));
-          else setTweaks(t => ({ ...t, mode: 'profesor' }));
-          setAuthenticated(true);
+          if (user.rol === 'profesor' && user.estado === 'pendiente') {
+            setPendingUser(user);
+            setNeedsPassword(true);
+            setAuthenticated(false);
+          } else {
+            if (user.rol === 'admin') setTweaks(t => ({ ...t, mode: 'admin', viewport: 'desktop' }));
+            else setTweaks(t => ({ ...t, mode: 'profesor' }));
+            setAuthenticated(true);
+          }
         });
       }).catch(() => {
         api.clearToken();
@@ -318,11 +386,20 @@ function App() {
       if (user.rol === 'admin') {
         await initAdminData();
         setTweaks(t => ({ ...t, mode: 'admin', viewport: 'desktop' }));
+        setNeedsPassword(false);
+        setAuthenticated(true);
       } else {
         await initAppData(user);
         setTweaks(t => ({ ...t, mode: 'profesor', viewport: 'desktop' }));
+        if (user.rol === 'profesor' && user.estado === 'pendiente') {
+          setPendingUser(user);
+          setNeedsPassword(true);
+          setAuthenticated(false);
+        } else {
+          setNeedsPassword(false);
+          setAuthenticated(true);
+        }
       }
-      setAuthenticated(true);
     } catch (e) {
       showToast('Error cargando datos: ' + e.message);
     } finally {
@@ -360,6 +437,24 @@ function App() {
           />
         </div>
         <Toast message={toast}/>
+        <TweaksPanel tweaks={tweaks} setTweaks={setTweaks} open={tweaksOpen} setOpen={setTweaksOpen}/>
+      </>
+    );
+  }
+
+  // ─── Set password (primer acceso profesor)
+  if (needsPassword && pendingUser) {
+    const inner = <SetPasswordScreen user={pendingUser} onLogin={handleLogin}/>;
+    return (
+      <>
+        <div className="viewport">
+          {tweaks.viewport === 'mobile'
+            ? <MobileFrame>{inner}</MobileFrame>
+            : <DesktopFrame>
+                <div style={{ flex: 1, display: 'flex', alignItems: 'stretch' }}>{inner}</div>
+              </DesktopFrame>
+          }
+        </div>
         <TweaksPanel tweaks={tweaks} setTweaks={setTweaks} open={tweaksOpen} setOpen={setTweaksOpen}/>
       </>
     );

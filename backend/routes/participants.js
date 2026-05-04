@@ -59,7 +59,7 @@ router.get('/', requireAuth, async (req, res) => {
 
 router.post('/', requireAuth, async (req, res) => {
   try {
-    const { nombre, edad, contacto } = req.body;
+    const { nombre, edad, contacto, apoderado_nombre, apoderado_telefono, apoderado_email } = req.body;
     if (!nombre) return res.status(400).json({ error: 'nombre requerido' });
 
     const id = 'u-' + crypto.randomBytes(4).toString('hex');
@@ -73,8 +73,8 @@ router.post('/', requireAuth, async (req, res) => {
     const avatar_bg = `oklch(82% 0.12 ${hue})`;
 
     await query(
-      "INSERT INTO participantes (id, nombre, edad, estado, iniciales, avatar_bg, contacto) VALUES ($1, $2, $3, 'activo', $4, $5, $6)",
-      [id, nombreTrim, edad ? Number(edad) : null, iniciales, avatar_bg, contacto || null]
+      "INSERT INTO participantes (id, nombre, edad, estado, iniciales, avatar_bg, contacto, apoderado_nombre, apoderado_telefono, apoderado_email) VALUES ($1, $2, $3, 'activo', $4, $5, $6, $7, $8, $9)",
+      [id, nombreTrim, edad ? Number(edad) : null, iniciales, avatar_bg, contacto || null, apoderado_nombre || null, apoderado_telefono || null, apoderado_email || null]
     );
 
     const participant = await queryOne('SELECT * FROM participantes WHERE id = $1', [id]);
@@ -98,15 +98,18 @@ router.get('/:id', requireAuth, async (req, res) => {
 
 router.put('/:id', requireAuth, async (req, res) => {
   try {
-    const { nombre, edad, contacto, estado } = req.body;
+    const { nombre, edad, contacto, estado, apoderado_nombre, apoderado_telefono, apoderado_email } = req.body;
     await query(`
       UPDATE participantes
-      SET nombre    = COALESCE($1, nombre),
-          edad      = COALESCE($2, edad),
-          contacto  = COALESCE($3, contacto),
-          estado    = COALESCE($4, estado)
-      WHERE id = $5
-    `, [nombre || null, edad ? Number(edad) : null, contacto || null, estado || null, req.params.id]);
+      SET nombre             = COALESCE($1, nombre),
+          edad               = COALESCE($2, edad),
+          contacto           = COALESCE($3, contacto),
+          estado             = COALESCE($4, estado),
+          apoderado_nombre   = COALESCE($5, apoderado_nombre),
+          apoderado_telefono = COALESCE($6, apoderado_telefono),
+          apoderado_email    = COALESCE($7, apoderado_email)
+      WHERE id = $8
+    `, [nombre || null, edad ? Number(edad) : null, contacto || null, estado || null, apoderado_nombre || null, apoderado_telefono || null, apoderado_email || null, req.params.id]);
     const p = await queryOne('SELECT * FROM participantes WHERE id = $1', [req.params.id]);
     res.json(p);
   } catch (e) {
