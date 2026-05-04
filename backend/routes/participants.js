@@ -1,102 +1,128 @@
 const express = require('express');
 const crypto = require('crypto');
-const db = require('../db');
+const { query, queryOne } = require('../db');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
-// GET /api/participants?workshopId=&q=
-router.get('/', requireAuth, (req, res) => {
-  const { workshopId, q } = req.query;
+router.get('/available', requireAuth, async (req, res) => {
+  try {
+    const { workshopId } = req.query;
+    if (!workshopId) return res.status(400).json({ error: 'workshopId requerido' });
 
-  if (workshopId) {
-    const participants = db.prepare(`
-      SELECT p.* FROM participantes p
-      JOIN taller_participantes tp ON tp.participante_id = p.id
-      WHERE tp.taller_id = ?
-      ORDER BY p.nombre
-    `).all(workshopId);
-    return res.json(participants);
-  }
-
-  if (q) {
-    const participants = db.prepare(`
+    const participants = await query(`
       SELECT * FROM participantes
-      WHERE nombre LIKE ? OR iniciales LIKE ?
+      WHERE id NOT IN (
+        SELECT participante_id FROM taller_participantes WHERE taller_id = $1
+      )
       ORDER BY nombre
-      LIMIT 20
-    `).all(`%${q}%`, `%${q}%`);
-    return res.json(participants);
+    `, [workshopId]);
+
+    res.json(participants);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Error interno' });
   }
-
-  const participants = db.prepare('SELECT * FROM participantes ORDER BY nombre').all();
-  res.json(participants);
 });
 
-// GET /api/participants/available?workshopId=  — socios NO inscritos en ese taller
-router.get('/available', requireAuth, (req, res) => {
-  const { workshopId } = req.query;
-  if (!workshopId) return res.status(400).json({ error: 'workshopId requerido' });
+router.get('/', requireAuth, async (req, res) => {
+  try {
+    const { workshopId, q } = req.query;
 
-  const participants = db.prepare(`
-    SELECT * FROM participantes
-    WHERE id NOT IN (
-      SELECT participante_id FROM taller_participantes WHERE taller_id = ?
-    )
-    ORDER BY nombre
-  `).all(workshopId);
+    if (workshopId) {
+      const participants = await query(`
+        SELECT p.* FROM participantes p
+        JOIN taller_participantes tp ON tp.participante_id = p.id
+        WHERE tp.taller_id = $1
+        ORDER BY p.nombre
+      `, [workshopId]);
+      return res.json(participants);
+    }
 
-  res.json(participants);
+    if (q) {
+      const participants = await query(`
+        SELECT * FROM participantes
+        WHERE nombre ILIKE $1 OR iniciales ILIKE $1
+        ORDER BY nombre
+        LIMIT 20
+      `, [`%${q}%`]);
+      return res.json(participants);
+    }
+
+    const participants = await query('SELECT * FROM participantes ORDER BY nombre');
+    res.json(participants);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Error interno' });
+  }
 });
 
-// POST /api/participants  — registrar nuevo participante
-router.post('/', requireAuth, (req, res) => {
-  const { nombre, edad, contacto } = req.body;
-  if (!nombre) return res.status(400).json({ error: 'nombre requerido' });
+router.post('/', requireAuth, async (req, res) => {
+  try {
+    const { nombre, edad, contacto } = req.body;
+    if (!nombre) return res.status(400).json({ error: 'nombre requerido' });
 
-  const id = 'u-' + crypto.randomBytes(4).toString('hex');
-  const nombreTrim = nombre.trim();
-  const partes = nombreTrim.split(' ');
-  const iniciales = partes.length >= 2
-    ? partes[0][0].toUpperCase() + partes[partes.length - 1][0].toUpperCase()
-    : nombreTrim.slice(0, 2).toUpperCase();
+    const id = 'u-' + crypto.randomBytes(4).toString('hex');
+    const nombreTrim = nombre.trim();
+    const partes = nombreTrim.split(' ');
+    const iniciales = partes.length >= 2
+      ? partes[0][0].toUpperCase() + partes[partes.length - 1][0].toUpperCase()
+      : nombreTrim.slice(0, 2).toUpperCase();
 
-  const hue = Math.floor(Math.random() * 360);
-  const avatar_bg = `oklch(82% 0.12 ${hue})`;
+    const hue = Math.floor(Math.random() * 360);
+    const avatar_bg = `oklch(82% 0.12 ${hue})`;
 
-  db.prepare(`
-    INSERT INTO participantes (id, nombre, edad, estado, iniciales, avatar_bg, contacto)
-    VALUES (?, ?, ?, 'activo', ?, ?, ?)
-  `).run(id, nombreTrim, edad ? Number(edad) : null, iniciales, avatar_bg, contacto || null);
+    await query(
+      "INSERT INTO participantes (id, nombre, edad, estado, iniciales, avatar_bg, contacto) VALUES ($1, $2, $3, 'activo', $4, $5, $6)",
+      [id, nombreTrim, edad ? Number(edad) : null, iniciales, avatar_bg, contacto || null]
+    );
 
-  const participant = db.prepare('SELECT * FROM participantes WHERE id = ?').get(id);
-  res.status(201).json(participant);
+    const participant = await queryOne('SELECT * FROM participantes WHERE id = $1', [id]);
+    res.status(201).json(participant);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Error interno' });
+  }
 });
 
-// GET /api/participants/:id
-router.get('/:id', requireAuth, (req, res) => {
-  const p = db.prepare('SELECT * FROM participantes WHERE id = ?').get(req.params.id);
-  if (!p) return res.status(404).json({ error: 'Participante no encontrado' });
-  res.json(p);
+router.get('/:id', requireAuth, async (req, res) => {
+  try {
+    const p = await queryOne('SELECT * FROM participantes WHERE id = $1', [req.params.id]);
+    if (!p) return res.status(404).json({ error: 'Participante no encontrado' });
+    res.json(p);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Error interno' });
+  }
 });
 
-// PUT /api/participants/:id
-router.put('/:id', requireAuth, (req, res) => {
-  const { nombre, edad, contacto, estado } = req.body;
-  db.prepare(`
-    UPDATE participantes
-    SET nombre = COALESCE(?, nombre), edad = COALESCE(?, edad),
-        contacto = COALESCE(?, contacto), estado = COALESCE(?, estado)
-    WHERE id = ?
-  `).run(nombre || null, edad ? Number(edad) : null, contacto || null, estado || null, req.params.id);
-  const p = db.prepare('SELECT * FROM participantes WHERE id = ?').get(req.params.id);
-  res.json(p);
+router.put('/:id', requireAuth, async (req, res) => {
+  try {
+    const { nombre, edad, contacto, estado } = req.body;
+    await query(`
+      UPDATE participantes
+      SET nombre    = COALESCE($1, nombre),
+          edad      = COALESCE($2, edad),
+          contacto  = COALESCE($3, contacto),
+          estado    = COALESCE($4, estado)
+      WHERE id = $5
+    `, [nombre || null, edad ? Number(edad) : null, contacto || null, estado || null, req.params.id]);
+    const p = await queryOne('SELECT * FROM participantes WHERE id = $1', [req.params.id]);
+    res.json(p);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Error interno' });
+  }
 });
 
-// DELETE /api/participants/:id
-router.delete('/:id', requireAuth, (req, res) => {
-  db.prepare('DELETE FROM participantes WHERE id = ?').run(req.params.id);
-  res.json({ ok: true });
+router.delete('/:id', requireAuth, async (req, res) => {
+  try {
+    await query('DELETE FROM participantes WHERE id = $1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Error interno' });
+  }
 });
 
 module.exports = router;

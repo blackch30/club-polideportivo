@@ -1,87 +1,105 @@
 const express = require('express');
-const db = require('../../db');
+const { query, queryOne } = require('../../db');
 const { requireAdmin } = require('../../middleware/auth');
 
 const router = express.Router();
 
-// GET /api/admin/reports/dashboard  — KPIs principales
-router.get('/dashboard', requireAdmin, (req, res) => {
-  const alumnosActivos = db.prepare(
-    "SELECT COUNT(*) as c FROM participantes WHERE estado = 'activo'"
-  ).get().c;
+router.get('/dashboard', requireAdmin, async (req, res) => {
+  try {
+    const { c: alumnosActivos } = await queryOne("SELECT COUNT(*) as c FROM participantes WHERE estado = 'activo'");
+    const { c: totalTalleres }  = await queryOne('SELECT COUNT(*) as c FROM talleres');
 
-  const totalTalleres = db.prepare('SELECT COUNT(*) as c FROM talleres').get().c;
+    const { total: ingresosMes } = await queryOne(`
+      SELECT COALESCE(SUM(monto), 0) as total FROM pagos
+      WHERE estado = 'pagado' AND TO_CHAR(fecha, 'YYYY-MM') = TO_CHAR(NOW(), 'YYYY-MM')
+    `);
 
-  const ingresosMes = db.prepare(`
-    SELECT COALESCE(SUM(monto), 0) as total FROM pagos
-    WHERE estado = 'pagado' AND strftime('%Y-%m', fecha) = strftime('%Y-%m', 'now')
-  `).get().total;
+    const { pct: asistenciaProm } = await queryOne(`
+      SELECT ROUND(100.0 * SUM(CASE WHEN estado IN ('present','late') THEN 1 ELSE 0 END)::numeric / GREATEST(COUNT(*), 1), 0) as pct
+      FROM asistencias
+      WHERE fecha >= NOW() - INTERVAL '30 days'
+    `);
 
-  const asistenciaProm = db.prepare(`
-    SELECT ROUND(100.0 * SUM(CASE WHEN estado IN ('present','late') THEN 1 ELSE 0 END) / MAX(COUNT(*), 1), 0) as pct
-    FROM asistencias
-    WHERE fecha >= date('now', '-30 days')
-  `).get().pct || 0;
+    const { c: linksActivos } = await queryOne(
+      "SELECT COUNT(*) as c FROM magic_links WHERE activo = 1 AND expires_at > NOW()"
+    );
 
-  // Links activos en este momento
-  const linksActivos = db.prepare(
-    "SELECT COUNT(*) as c FROM magic_links WHERE activo = 1 AND expires_at > datetime('now')"
-  ).get().c;
-
-  res.json({ alumnosActivos, totalTalleres, ingresosMes, asistenciaProm, linksActivos });
+    res.json({
+      alumnosActivos: Number(alumnosActivos),
+      totalTalleres:  Number(totalTalleres),
+      ingresosMes:    Number(ingresosMes),
+      asistenciaProm: Number(asistenciaProm) || 0,
+      linksActivos:   Number(linksActivos),
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Error interno' });
+  }
 });
 
-// GET /api/admin/reports/attendance  — asistencia por disciplina
-router.get('/attendance', requireAdmin, (req, res) => {
-  const rows = db.prepare(`
-    SELECT t.disciplina, t.nombre,
-      COUNT(a.id) as total,
-      SUM(CASE WHEN a.estado IN ('present','late') THEN 1 ELSE 0 END) as presentes,
-      COUNT(DISTINCT tp.participante_id) as alumnos
-    FROM talleres t
-    LEFT JOIN asistencias a ON a.taller_id = t.id
-    LEFT JOIN taller_participantes tp ON tp.taller_id = t.id
-    GROUP BY t.id
-    ORDER BY t.disciplina
-  `).all();
+router.get('/attendance', requireAdmin, async (req, res) => {
+  try {
+    const rows = await query(`
+      SELECT t.disciplina, t.nombre,
+        COUNT(a.id) as total,
+        SUM(CASE WHEN a.estado IN ('present','late') THEN 1 ELSE 0 END) as presentes,
+        COUNT(DISTINCT tp.participante_id) as alumnos
+      FROM talleres t
+      LEFT JOIN asistencias a ON a.taller_id = t.id
+      LEFT JOIN taller_participantes tp ON tp.taller_id = t.id
+      GROUP BY t.id, t.disciplina, t.nombre
+      ORDER BY t.disciplina
+    `);
 
-  const result = rows.map(r => ({
-    nombre: r.disciplina,
-    pct: r.total > 0 ? Math.round((r.presentes / r.total) * 100) : 0,
-    alumnos: r.alumnos,
-  }));
+    const result = rows.map(r => ({
+      nombre: r.disciplina,
+      pct:    Number(r.total) > 0 ? Math.round((Number(r.presentes) / Number(r.total)) * 100) : 0,
+      alumnos: Number(r.alumnos),
+    }));
 
-  res.json(result);
+    res.json(result);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Error interno' });
+  }
 });
 
-// GET /api/admin/reports/revenue?months=12  — ingresos por mes
-router.get('/revenue', requireAdmin, (req, res) => {
-  const months = Math.min(Number(req.query.months) || 12, 24);
+router.get('/revenue', requireAdmin, async (req, res) => {
+  try {
+    const months = Math.min(Number(req.query.months) || 12, 24);
 
-  const rows = db.prepare(`
-    SELECT strftime('%Y-%m', fecha) as mes, COALESCE(SUM(monto), 0) as total
-    FROM pagos WHERE estado = 'pagado'
-    GROUP BY mes
-    ORDER BY mes DESC
-    LIMIT ?
-  `).all(months).reverse();
+    const rows = await query(`
+      SELECT TO_CHAR(fecha, 'YYYY-MM') as mes, COALESCE(SUM(monto), 0) as total
+      FROM pagos WHERE estado = 'pagado'
+      GROUP BY mes
+      ORDER BY mes DESC
+      LIMIT $1
+    `, [months]);
 
-  res.json(rows);
+    res.json(rows.reverse());
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Error interno' });
+  }
 });
 
-// GET /api/admin/reports/inscriptions?months=12
-router.get('/inscriptions', requireAdmin, (req, res) => {
-  const months = Math.min(Number(req.query.months) || 12, 24);
+router.get('/inscriptions', requireAdmin, async (req, res) => {
+  try {
+    const months = Math.min(Number(req.query.months) || 12, 24);
 
-  const rows = db.prepare(`
-    SELECT strftime('%Y-%m', fecha) as mes, COUNT(*) as total
-    FROM inscripciones
-    GROUP BY mes
-    ORDER BY mes DESC
-    LIMIT ?
-  `).all(months).reverse();
+    const rows = await query(`
+      SELECT TO_CHAR(fecha, 'YYYY-MM') as mes, COUNT(*) as total
+      FROM inscripciones
+      GROUP BY mes
+      ORDER BY mes DESC
+      LIMIT $1
+    `, [months]);
 
-  res.json(rows);
+    res.json(rows.reverse());
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Error interno' });
+  }
 });
 
 module.exports = router;

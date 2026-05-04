@@ -1,187 +1,160 @@
-// Usa node:sqlite (integrado en Node.js 22+) — sin compilación nativa
-const { DatabaseSync } = require('node:sqlite');
-const path = require('path');
-const fs = require('fs');
+const { Pool } = require('pg');
 
-// En Railway usar /data (volumen persistente), en local usar el directorio del backend
-const dbPath = process.env.DB_PATH || path.join(__dirname, 'clubpoli.db');
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+});
 
-// Crear directorio si no existe (necesario en Railway si el volumen no está montado)
-const dbDir = path.dirname(dbPath);
-if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+// Ejecuta una query y devuelve las filas
+async function query(sql, params = []) {
+  const { rows } = await pool.query(sql, params);
+  return rows;
+}
 
-const _db = new DatabaseSync(dbPath);
+// Devuelve la primera fila o undefined
+async function queryOne(sql, params = []) {
+  const rows = await query(sql, params);
+  return rows[0];
+}
 
-// Wrapper compatible con la API de better-sqlite3 (síncrono)
-const db = {
-  _db,
+// Crea todas las tablas si no existen
+async function initDB() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id           TEXT PRIMARY KEY,
+      nombre       TEXT NOT NULL,
+      email        TEXT UNIQUE NOT NULL,
+      password_hash TEXT,
+      rol          TEXT NOT NULL DEFAULT 'profesor',
+      dni          TEXT,
+      telefono     TEXT,
+      estado       TEXT NOT NULL DEFAULT 'activo',
+      desde        TEXT,
+      iniciales    TEXT,
+      avatar_bg    TEXT,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    );
 
-  exec(sql) {
-    _db.exec(sql);
-  },
+    CREATE TABLE IF NOT EXISTS magic_links (
+      id         SERIAL PRIMARY KEY,
+      token      TEXT UNIQUE NOT NULL,
+      user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL,
+      used_at    TIMESTAMPTZ,
+      usos       INTEGER DEFAULT 0,
+      activo     INTEGER DEFAULT 1,
+      permanent  INTEGER DEFAULT 0
+    );
 
-  pragma(str) {
-    _db.exec(`PRAGMA ${str}`);
-  },
+    CREATE TABLE IF NOT EXISTS talleres (
+      id          TEXT PRIMARY KEY,
+      nombre      TEXT NOT NULL,
+      disciplina  TEXT NOT NULL,
+      emoji       TEXT,
+      horario     TEXT,
+      hora        TEXT,
+      cupo        INTEGER DEFAULT 20,
+      sede        TEXT,
+      color       TEXT,
+      proxima     TEXT,
+      profesor_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    );
 
-  prepare(sql) {
-    const stmt = _db.prepare(sql);
-    return {
-      get(...args)  { return stmt.get(...args); },
-      all(...args)  { return stmt.all(...args); },
-      run(...args)  { return stmt.run(...args); },
-    };
-  },
+    CREATE TABLE IF NOT EXISTS profesor_disciplinas (
+      profesor_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      disciplina  TEXT NOT NULL,
+      PRIMARY KEY (profesor_id, disciplina)
+    );
 
-  // Implementa el patrón transaction de better-sqlite3
-  transaction(fn) {
-    return (...args) => {
-      _db.exec('BEGIN');
-      try {
-        const result = fn(...args);
-        _db.exec('COMMIT');
-        return result;
-      } catch (e) {
-        _db.exec('ROLLBACK');
-        throw e;
-      }
-    };
-  },
-};
+    CREATE TABLE IF NOT EXISTS participantes (
+      id         TEXT PRIMARY KEY,
+      nombre     TEXT NOT NULL,
+      edad       INTEGER,
+      estado     TEXT NOT NULL DEFAULT 'activo',
+      iniciales  TEXT,
+      avatar_bg  TEXT,
+      contacto   TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
 
-db.exec(`PRAGMA journal_mode = WAL`);
-db.exec(`PRAGMA foreign_keys = ON`);
+    CREATE TABLE IF NOT EXISTS taller_participantes (
+      taller_id       TEXT NOT NULL REFERENCES talleres(id) ON DELETE CASCADE,
+      participante_id TEXT NOT NULL REFERENCES participantes(id) ON DELETE CASCADE,
+      PRIMARY KEY (taller_id, participante_id)
+    );
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id         TEXT PRIMARY KEY,
-    nombre     TEXT NOT NULL,
-    email      TEXT UNIQUE NOT NULL,
-    password_hash TEXT,
-    rol        TEXT NOT NULL DEFAULT 'profesor',
-    dni        TEXT,
-    telefono   TEXT,
-    estado     TEXT NOT NULL DEFAULT 'activo',
-    desde      TEXT,
-    iniciales  TEXT,
-    avatar_bg  TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
-  );
+    CREATE TABLE IF NOT EXISTS inscripciones (
+      id              TEXT PRIMARY KEY,
+      participante_id TEXT NOT NULL REFERENCES participantes(id),
+      taller_id       TEXT NOT NULL REFERENCES talleres(id),
+      fecha           DATE DEFAULT CURRENT_DATE,
+      estado          TEXT NOT NULL DEFAULT 'pendiente',
+      monto           NUMERIC,
+      metodo_pago     TEXT,
+      created_at      TIMESTAMPTZ DEFAULT NOW()
+    );
 
-  CREATE TABLE IF NOT EXISTS magic_links (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    token      TEXT UNIQUE NOT NULL,
-    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    created_at TEXT DEFAULT (datetime('now')),
-    expires_at TEXT NOT NULL,
-    used_at    TEXT,
-    usos       INTEGER DEFAULT 0,
-    activo     INTEGER DEFAULT 1
-  );
+    CREATE TABLE IF NOT EXISTS asistencias (
+      id              SERIAL PRIMARY KEY,
+      taller_id       TEXT NOT NULL REFERENCES talleres(id) ON DELETE CASCADE,
+      participante_id TEXT NOT NULL REFERENCES participantes(id) ON DELETE CASCADE,
+      fecha           DATE NOT NULL,
+      estado          TEXT NOT NULL DEFAULT 'absent',
+      created_at      TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(taller_id, participante_id, fecha)
+    );
 
-  CREATE TABLE IF NOT EXISTS talleres (
-    id          TEXT PRIMARY KEY,
-    nombre      TEXT NOT NULL,
-    disciplina  TEXT NOT NULL,
-    emoji       TEXT,
-    horario     TEXT,
-    hora        TEXT,
-    cupo        INTEGER DEFAULT 20,
-    sede        TEXT,
-    color       TEXT,
-    proxima     TEXT,
-    profesor_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-    created_at  TEXT DEFAULT (datetime('now'))
-  );
+    CREATE TABLE IF NOT EXISTS pagos (
+      id              TEXT PRIMARY KEY,
+      inscripcion_id  TEXT REFERENCES inscripciones(id),
+      participante_id TEXT REFERENCES participantes(id),
+      taller_id       TEXT REFERENCES talleres(id),
+      concepto        TEXT,
+      monto           NUMERIC NOT NULL,
+      estado          TEXT NOT NULL DEFAULT 'pendiente',
+      metodo          TEXT,
+      comprobante     TEXT,
+      periodo         TEXT,
+      tipo            TEXT DEFAULT 'mensualidad',
+      comentario      TEXT,
+      fecha           DATE DEFAULT CURRENT_DATE,
+      created_at      TIMESTAMPTZ DEFAULT NOW()
+    );
 
-  CREATE TABLE IF NOT EXISTS profesor_disciplinas (
-    profesor_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    disciplina  TEXT NOT NULL,
-    PRIMARY KEY (profesor_id, disciplina)
-  );
+    CREATE TABLE IF NOT EXISTS empresa (
+      id          INTEGER PRIMARY KEY DEFAULT 1,
+      nombre      TEXT,
+      razon       TEXT,
+      cuit        TEXT,
+      direccion   TEXT,
+      telefono    TEXT,
+      email       TEXT,
+      web         TEXT,
+      horario     TEXT,
+      logo        TEXT,
+      color_marca TEXT DEFAULT 'lima'
+    );
 
-  CREATE TABLE IF NOT EXISTS participantes (
-    id         TEXT PRIMARY KEY,
-    nombre     TEXT NOT NULL,
-    edad       INTEGER,
-    estado     TEXT NOT NULL DEFAULT 'activo',
-    iniciales  TEXT,
-    avatar_bg  TEXT,
-    contacto   TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
-  );
+    CREATE TABLE IF NOT EXISTS sedes (
+      id        TEXT PRIMARY KEY,
+      nombre    TEXT NOT NULL,
+      direccion TEXT,
+      canchas   INTEGER DEFAULT 0,
+      activa    INTEGER DEFAULT 1
+    );
+  `);
 
-  CREATE TABLE IF NOT EXISTS taller_participantes (
-    taller_id       TEXT NOT NULL REFERENCES talleres(id) ON DELETE CASCADE,
-    participante_id TEXT NOT NULL REFERENCES participantes(id) ON DELETE CASCADE,
-    PRIMARY KEY (taller_id, participante_id)
-  );
+  // Filas por defecto
+  await pool.query(`
+    INSERT INTO empresa (id, nombre, razon) VALUES (1, 'Club Polideportivo', 'Asociación Civil')
+    ON CONFLICT (id) DO NOTHING
+  `);
+  await pool.query(`
+    INSERT INTO sedes (id, nombre, activa) VALUES ('sede-1', 'Sede Principal', 1)
+    ON CONFLICT (id) DO NOTHING
+  `);
+}
 
-  CREATE TABLE IF NOT EXISTS inscripciones (
-    id              TEXT PRIMARY KEY,
-    participante_id TEXT NOT NULL REFERENCES participantes(id),
-    taller_id       TEXT NOT NULL REFERENCES talleres(id),
-    fecha           TEXT DEFAULT (date('now')),
-    estado          TEXT NOT NULL DEFAULT 'pendiente',
-    monto           REAL,
-    metodo_pago     TEXT,
-    created_at      TEXT DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS asistencias (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    taller_id       TEXT NOT NULL REFERENCES talleres(id) ON DELETE CASCADE,
-    participante_id TEXT NOT NULL REFERENCES participantes(id) ON DELETE CASCADE,
-    fecha           TEXT NOT NULL,
-    estado          TEXT NOT NULL DEFAULT 'absent',
-    created_at      TEXT DEFAULT (datetime('now')),
-    UNIQUE(taller_id, participante_id, fecha)
-  );
-
-  CREATE TABLE IF NOT EXISTS pagos (
-    id              TEXT PRIMARY KEY,
-    inscripcion_id  TEXT REFERENCES inscripciones(id),
-    participante_id TEXT REFERENCES participantes(id),
-    taller_id       TEXT REFERENCES talleres(id),
-    concepto        TEXT,
-    monto           REAL NOT NULL,
-    estado          TEXT NOT NULL DEFAULT 'pendiente',
-    metodo          TEXT,
-    comprobante     TEXT,
-    fecha           TEXT DEFAULT (date('now')),
-    created_at      TEXT DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS empresa (
-    id        INTEGER PRIMARY KEY DEFAULT 1,
-    nombre    TEXT,
-    razon     TEXT,
-    cuit      TEXT,
-    direccion TEXT,
-    telefono  TEXT,
-    email     TEXT,
-    web       TEXT,
-    horario   TEXT
-  );
-
-  CREATE TABLE IF NOT EXISTS sedes (
-    id        TEXT PRIMARY KEY,
-    nombre    TEXT NOT NULL,
-    direccion TEXT,
-    canchas   INTEGER DEFAULT 0,
-    activa    INTEGER DEFAULT 1
-  );
-`);
-
-// Migraciones de columnas
-try { db._db.exec('ALTER TABLE pagos ADD COLUMN periodo TEXT'); } catch(e) {}
-try { db._db.exec('ALTER TABLE magic_links ADD COLUMN permanent INTEGER DEFAULT 0'); } catch(e) {}
-try { db._db.exec("ALTER TABLE pagos ADD COLUMN tipo TEXT DEFAULT 'mensualidad'"); } catch(e) {}
-try { db._db.exec('ALTER TABLE pagos ADD COLUMN comentario TEXT'); } catch(e) {}
-try { db._db.exec('ALTER TABLE empresa ADD COLUMN logo TEXT'); } catch(e) {}
-try { db._db.exec("ALTER TABLE empresa ADD COLUMN color_marca TEXT DEFAULT 'lima'"); } catch(e) {}
-// Garantizar fila empresa y sede por defecto
-try { db._db.exec("INSERT OR IGNORE INTO empresa (id, nombre, razon) VALUES (1, 'Club Polideportivo', 'Asociación Civil')"); } catch(e) {}
-try { db._db.exec("INSERT OR IGNORE INTO sedes (id, nombre, activa) VALUES ('sede-1', 'Sede Principal', 1)"); } catch(e) {}
-
-module.exports = db;
+module.exports = { pool, query, queryOne, initDB };
