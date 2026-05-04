@@ -6,6 +6,59 @@ const { requireAdmin } = require('../../middleware/auth');
 
 const router = express.Router();
 
+function buildMagicLinkEmail(nombre, url, vigencia) {
+  const nota = vigencia ? `Este enlace es <strong>${vigencia}</strong>.` : 'Usa este enlace para ingresar a tu panel.';
+  return `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f4f7;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f7;padding:32px 0;">
+    <tr><td align="center">
+      <table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+        <!-- Header -->
+        <tr>
+          <td style="background:#1a1a2e;padding:28px 40px;text-align:center;">
+            <p style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:.5px;">Club Polideportivo</p>
+            <p style="margin:6px 0 0;font-size:13px;color:#a0aec0;">Panel de Profesor</p>
+          </td>
+        </tr>
+        <!-- Body -->
+        <tr>
+          <td style="padding:36px 40px 28px;">
+            <p style="margin:0 0 8px;font-size:16px;color:#374151;">Hola, <strong>${nombre}</strong></p>
+            <p style="margin:0 0 28px;font-size:15px;color:#6b7280;line-height:1.6;">
+              El administrador te ha generado un enlace de acceso para tu panel. Haz clic en el botón para ingresar.
+            </p>
+            <!-- Button -->
+            <table cellpadding="0" cellspacing="0" style="margin:0 auto 28px;">
+              <tr>
+                <td style="background:#4f46e5;border-radius:8px;">
+                  <a href="${url}" style="display:inline-block;padding:14px 36px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;letter-spacing:.3px;">
+                    Acceder a mi panel →
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:0 0 8px;font-size:13px;color:#9ca3af;text-align:center;">${nota}</p>
+            <p style="margin:0;font-size:12px;color:#d1d5db;text-align:center;">No compartas este enlace con nadie.</p>
+          </td>
+        </tr>
+        <!-- Footer -->
+        <tr>
+          <td style="background:#f9fafb;padding:16px 40px;border-top:1px solid #e5e7eb;">
+            <p style="margin:0;font-size:11px;color:#9ca3af;text-align:center;">
+              Si el botón no funciona, copia y pega este enlace en tu navegador:<br>
+              <span style="color:#6b7280;word-break:break-all;">${url}</span>
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
 router.get('/', requireAdmin, async (req, res) => {
   try {
     const professors = await query(`
@@ -150,10 +203,7 @@ router.post('/:id/magic-link', requireAdmin, async (req, res) => {
           from: `"Club Polideportivo" <${process.env.SMTP_USER}>`,
           to: user.email,
           subject: 'Tu enlace de acceso — Club Polideportivo',
-          html: `<p>Hola ${user.nombre},</p>
-<p>El administrador ha generado un enlace de acceso para tu panel de profesor (${vigencia}):</p>
-<p><a href="${url}" style="font-size:16px;font-weight:bold">${url}</a></p>
-<p>No compartas este enlace con nadie.</p>`,
+          html: buildMagicLinkEmail(user.nombre, url, vigencia),
         }).catch(err => console.error('Error enviando email:', err.message));
       } catch (err) {
         console.error('Error enviando email:', err.message);
@@ -194,10 +244,7 @@ router.post('/:id/magic-link/email', requireAdmin, async (req, res) => {
       from: `"Club Polideportivo" <${process.env.SMTP_USER}>`,
       to: user.email,
       subject: 'Tu enlace de acceso — Club Polideportivo',
-      html: `<p>Hola ${user.nombre},</p>
-<p>Aquí está tu enlace de acceso al panel de profesor:</p>
-<p><a href="${url}" style="font-size:16px;font-weight:bold">${url}</a></p>
-<p>No compartas este enlace con nadie.</p>`,
+      html: buildMagicLinkEmail(user.nombre, url, null),
     });
 
     res.json({ ok: true, email: user.email });
