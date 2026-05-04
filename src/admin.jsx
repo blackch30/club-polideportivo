@@ -2124,7 +2124,23 @@ function AgregarProfesorModal({ autoLink, onClose, onSave, onToast }) {
 function LinkModal({ data, onClose, onCopy, onRegenerate }) {
   const [dias, setDias] = React.useState(data.dias || 7);
   const [permanent, setPermanent] = React.useState(!!data.permanent);
-  React.useEffect(() => { setDias(data.dias || 7); setPermanent(!!data.permanent); }, [data.token]);
+  const [sendingEmail, setSendingEmail] = React.useState(false);
+  const [emailSent, setEmailSent] = React.useState(false);
+  const [emailError, setEmailError] = React.useState('');
+  React.useEffect(() => { setDias(data.dias || 7); setPermanent(!!data.permanent); setEmailSent(false); setEmailError(''); }, [data.token]);
+
+  const handleSendEmail = async () => {
+    setSendingEmail(true);
+    setEmailError('');
+    try {
+      await api.sendMagicLinkEmail(data.profesor.id);
+      setEmailSent(true);
+    } catch (e) {
+      setEmailError(e.message || 'Error enviando email');
+    } finally {
+      setSendingEmail(false);
+    }
+  };
   return (
     <div style={{
       position: 'fixed', inset: 0, background: 'rgba(16, 24, 40, 0.5)',
@@ -2212,12 +2228,20 @@ function LinkModal({ data, onClose, onCopy, onRegenerate }) {
             <b>Seguridad:</b> el enlace permite acceso sin contraseña al panel del profesor. {permanent ? 'Los tokens permanentes no expiran — solo se invalidan revocándolos manualmente.' : 'Se invalida al expirar o al revocarse manualmente.'}
           </div>
 
+          {emailError && (
+            <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 8, background: 'var(--absent-soft)', color: 'var(--absent)', fontSize: 12 }}>
+              {emailError}
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-            <Button variant="secondary" onClick={onClose} style={{ flex: 1 }}>Cerrar</Button>
-            <Button onClick={onCopy} style={{ flex: 1 }}>
-              {data.copied ? <><Icon.check size={15}/> Copiado</> : <><Icon.mail size={15}/> Enviar por correo</>}
+            <Button variant="secondary" onClick={onCopy} style={{ flex: 1 }}>
+              {data.copied ? <><Icon.check size={15}/> Copiado</> : <><Icon.link size={15}/> Copiar enlace</>}
+            </Button>
+            <Button onClick={handleSendEmail} disabled={sendingEmail || emailSent} style={{ flex: 1 }}>
+              {emailSent ? <><Icon.check size={15}/> Enviado</> : sendingEmail ? 'Enviando…' : <><Icon.mail size={15}/> Enviar por correo</>}
             </Button>
           </div>
+          <Button variant="secondary" onClick={onClose} style={{ width: '100%', marginTop: 8 }}>Cerrar</Button>
         </div>
       </div>
     </div>

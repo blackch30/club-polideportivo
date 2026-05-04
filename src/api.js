@@ -103,6 +103,7 @@ const api = {
   updateProfessor(id, d)   { return this.put(`/admin/professors/${id}`, d); },
   deleteProfessor(id)      { return this.delete(`/admin/professors/${id}`); },
   generateMagicLink(id, opts) { return this.post(`/admin/professors/${id}/magic-link`, opts || {}); },
+  sendMagicLinkEmail(id)   { return this.post(`/admin/professors/${id}/magic-link/email`, {}); },
   revokeMagicLink(id)      { return this.delete(`/admin/professors/${id}/magic-link`); },
 
   // Admin Talleres

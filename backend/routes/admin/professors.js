@@ -134,10 +134,73 @@ router.post('/:id/magic-link', requireAdmin, async (req, res) => {
     const url = `${process.env.APP_URL}/api/auth/magic-link/${token}`;
     console.log(`\n🔗 Magic link ${permanent ? 'PERMANENTE' : `(${dias}d)`} para ${user.email}:\n   ${url}\n`);
 
+    if (process.env.SMTP_HOST && process.env.SMTP_USER) {
+      try {
+        const nodemailer = require('nodemailer');
+        const transporter = nodemailer.createTransport({
+          host: process.env.SMTP_HOST,
+          port: Number(process.env.SMTP_PORT) || 587,
+          auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+        });
+        const vigencia = permanent ? 'sin vencimiento' : `válido ${dias} día${dias !== 1 ? 's' : ''}`;
+        transporter.sendMail({
+          from: `"Club Polideportivo" <${process.env.SMTP_USER}>`,
+          to: user.email,
+          subject: 'Tu enlace de acceso — Club Polideportivo',
+          html: `<p>Hola ${user.nombre},</p>
+<p>El administrador ha generado un enlace de acceso para tu panel de profesor (${vigencia}):</p>
+<p><a href="${url}" style="font-size:16px;font-weight:bold">${url}</a></p>
+<p>No compartas este enlace con nadie.</p>`,
+        }).catch(err => console.error('Error enviando email:', err.message));
+      } catch (err) {
+        console.error('Error enviando email:', err.message);
+      }
+    }
+
     res.json({ token, url, expires_at: expiresAt, permanent: !!permanent });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Error interno' });
+  }
+});
+
+router.post('/:id/magic-link/email', requireAdmin, async (req, res) => {
+  try {
+    const user = await queryOne('SELECT * FROM users WHERE id = $1', [req.params.id]);
+    if (!user) return res.status(404).json({ error: 'Profesor no encontrado' });
+
+    const link = await queryOne(
+      'SELECT * FROM magic_links WHERE user_id = $1 AND activo = 1 ORDER BY created_at DESC LIMIT 1',
+      [req.params.id]
+    );
+    if (!link) return res.status(404).json({ error: 'No hay enlace activo para este profesor' });
+
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER) {
+      return res.status(503).json({ error: 'El servidor no tiene SMTP configurado' });
+    }
+
+    const url = `${process.env.APP_URL}/api/auth/magic-link/${link.token}`;
+    const nodemailer = require('nodemailer');
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT) || 587,
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    });
+
+    await transporter.sendMail({
+      from: `"Club Polideportivo" <${process.env.SMTP_USER}>`,
+      to: user.email,
+      subject: 'Tu enlace de acceso — Club Polideportivo',
+      html: `<p>Hola ${user.nombre},</p>
+<p>Aquí está tu enlace de acceso al panel de profesor:</p>
+<p><a href="${url}" style="font-size:16px;font-weight:bold">${url}</a></p>
+<p>No compartas este enlace con nadie.</p>`,
+    });
+
+    res.json({ ok: true, email: user.email });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Error enviando email: ' + e.message });
   }
 });
 
