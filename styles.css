@@ -469,6 +469,19 @@ body {
     oklch(96% 0.005 90);
 }
 
+@media (max-width: 767px) {
+  .viewport {
+    padding: 0;
+    min-height: 100dvh;
+    align-items: stretch;
+  }
+  .device-shell, .desktop-shell { display: contents; }
+  .device-screen { border-radius: 0; }
+  .desktop-toolbar { display: none; }
+  .tweaks-panel { display: none; }
+  .metabar { display: none; }
+}
+
 /* Meta chrome (topbar switcher) */
 .metabar {
   position: fixed;

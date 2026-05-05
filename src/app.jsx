@@ -325,6 +325,9 @@ function SetPasswordScreen({ user, onLogin }) {
   );
 }
 
+// Detecta si se está ejecutando en un dispositivo móvil real (no en el simulador de diseño)
+const IS_REAL_MOBILE = window.innerWidth < 768;
+
 // ── Main App
 function App() {
   const [tweaks, setTweaks] = useTweaks();
@@ -427,7 +430,7 @@ function App() {
   // ─── Cargando
   if (loadingData) {
     return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', color: 'var(--ink-2)', fontSize: 14, gap: 10 }}>
+      <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', color: 'var(--ink-2)', fontSize: 14 }}>
         <span style={{ opacity: 0.5 }}>Cargando…</span>
       </div>
     );
@@ -454,6 +457,14 @@ function App() {
   // ─── Set password (primer acceso profesor)
   if (needsPassword && pendingUser) {
     const inner = <SetPasswordScreen user={pendingUser} onLogin={handleLogin}/>;
+    if (IS_REAL_MOBILE) {
+      return (
+        <div style={{ height: '100dvh', background: 'var(--bg)', overflow: 'auto' }}>
+          {inner}
+          <Toast message={toast}/>
+        </div>
+      );
+    }
     return (
       <>
         <div className="viewport">
@@ -472,6 +483,14 @@ function App() {
   // ─── Login view
   if (!authenticated) {
     const inner = <LoginScreen onLogin={handleLogin} prefillEmail={magicEmail}/>;
+    if (IS_REAL_MOBILE) {
+      return (
+        <div style={{ height: '100dvh', background: 'var(--bg)', overflow: 'auto' }}>
+          {inner}
+          <Toast message={toast}/>
+        </div>
+      );
+    }
     return (
       <>
         <div className="viewport">
@@ -540,8 +559,33 @@ function App() {
   };
 
   const screenContent = renderRoute();
-  const showTabbar = tweaks.viewport === 'mobile' && !['detail', 'add', 'history', 'history-global', 'search-global', 'profile', 'payments-prof'].includes(route.name);
-  const hideTabbarAlways = ['detail', 'add', 'history'].includes(route.name); // detail has its own bottom bar
+  const hideTabbarAlways = ['detail', 'add', 'history'].includes(route.name);
+  const showTabbar = !hideTabbarAlways && !['history-global', 'search-global', 'profile', 'payments-prof'].includes(route.name);
+
+  // ─── Dispositivo móvil real: sin frame simulador
+  if (IS_REAL_MOBILE) {
+    return (
+      <>
+        <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', overflow: 'hidden' }}>
+          {!hideTabbarAlways && (
+            <div className="appbar">
+              <Avatar name={PROFESSOR.nombre} bg={PROFESSOR.avatarBg} initials={PROFESSOR.iniciales} size={36}/>
+              <div style={{ flex: 1 }}/>
+              <IconButton label="Notificaciones"><Icon.bell size={18}/></IconButton>
+            </div>
+          )}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'auto', position: 'relative' }}>
+            {screenContent}
+          </div>
+          {showTabbar && <TabBar route={route} setRoute={setRoute} onOpenProfile={() => setRoute({ name: 'profile' })}/>}
+        </div>
+        <Toast message={toast}/>
+      </>
+    );
+  }
+
+  // ─── Desktop / simulador
+  const showSimTabbar = tweaks.viewport === 'mobile' && showTabbar;
 
   return (
     <>
@@ -558,7 +602,7 @@ function App() {
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'auto', position: 'relative' }}>
               {screenContent}
             </div>
-            {showTabbar && <TabBar route={route} setRoute={setRoute} onOpenProfile={() => setRoute({ name: 'profile' })}/>}
+            {showSimTabbar && <TabBar route={route} setRoute={setRoute} onOpenProfile={() => setRoute({ name: 'profile' })}/>}
           </MobileFrame>
         ) : (
           <DesktopFrame>
